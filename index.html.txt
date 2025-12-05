@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>U.S. Property Investment Analyzer</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body { font-family: Arial, sans-serif; background: #f7f7fb; margin: 20px; }
+.container {
+max-width: 1100px; margin: auto; background: white; padding: 25px;
+border-radius: 10px; box-shadow: 0 3px 12px rgba(0,0,0,0.1);
+}
+h1 { text-align: center; }
+label { font-weight: bold; }
+input { width: 100%; padding: 8px; margin: 8px 0 20px 0; }
+.two-col { display: grid; grid-template-columns: repeat(2, 1fr); gap: 25px; }
+.results { margin-top: 40px; padding: 20px; background: #eef5ff; border-radius: 10px; }
+button {
+width: 100%; padding: 15px; background: #0066ff; border: none;
+color: white; font-size: 18px; cursor: pointer; border-radius: 6px;
+}
+button:hover { background: #004fcc; }
+canvas { margin-top: 30px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+<h1>🇺🇸 U.S. Property Investment Analyzer</h1>
+
+<div class="two-col">
+
+<div>
+<h2>Purchase & Mortgage</h2>
+<label>Purchase Price ($)</label>
+<input type="number" id="price">
+
+<label>Down Payment (%)</label>
+<input type="number" id="downPayment">
+
+<label>Closing Costs ($)</label>
+<input type="number" id="closingCosts">
+
+<label>Interest Rate (% per year)</label>
+<input type="number" id="interestRate">
+
+<label>Mortgage Term (years)</label>
+<input type="number" id="mortgageTerm">
+
+<label>PMI Rate (% of loan per year)</label>
+<input type="number" id="pmiRate" value="0.5">
+
+<label>Remove PMI at Equity (%)</label>
+<input type="number" id="pmiRemove" value="20">
+</div>
+
+<div>
+<h2>Income & Operating</h2>
+
+<label>Monthly Rent ($)</label>
+<input type="number" id="rent">
+
+<label>Vacancy Rate (%)</label>
+<input type="number" id="vacancy" value="5">
+
+<label>Property Taxes (annual $)</label>
+<input type="number" id="taxes">
+
+<label>Insurance (annual $)</label>
+<input type="number" id="insurance">
+
+<label>HOA / Condo Fees (monthly $)</label>
+<input type="number" id="hoa">
+
+<label>Maintenance (monthly $)</label>
+<input id="maintenance" type="number">
+
+<label>CapEx Reserve (monthly $)</label>
+<input id="capex" type="number">
+
+<label>Property Management (% of rent)</label>
+<input type="number" id="mgmt" value="10">
+</div>
+
+</div>
+
+<h2>Tax & Appreciation</h2>
+<div class="two-col">
+<div>
+<label>Federal Tax Rate (%)</label>
+<input type="number" id="federalTax" value="24">
+
+<label>State Tax Rate (%)</label>
+<input type="number" id="stateTax" value="5">
+</div>
+
+<div>
+<label>Annual Appreciation (%)</label>
+<input type="number" id="appreciation" value="3">
+
+<label>Annual Rent Growth (%)</label>
+<input type="number" id="rentGrowth" value="2">
+</div>
+</div>
+
+<button onclick="calculate()">Calculate Investment</button>
+
+<div class="results" id="results"></div>
+
+<canvas id="chartCashFlow" height="120"></canvas>
+<canvas id="chartEquity" height="120"></canvas>
+
+</div>
+
+
+<script>
+function calculate() {
+const price = +document.getElementById("price").value;
+const down = price * (+document.getElementById("downPayment").value / 100);
+const closing = +document.getElementById("closingCosts").value;
+const loan = price - down;
+
+const rate = +document.getElementById("interestRate").value / 100 / 12;
+const termMonths = +document.getElementById("mortgageTerm").value * 12;
+
+const pmiRate = +document.getElementById("pmiRate").value / 100;
+const pmiRemovePercent = +document.getElementById("pmiRemove").value / 100;
+
+const rent = +document.getElementById("rent").value;
+const vacancy = +document.getElementById("vacancy").value / 100;
+
+const taxes = +document.getElementById("taxes").value / 12;
+const insurance = +document.getElementById("insurance").value / 12;
+const hoa = +document.getElementById("hoa").value;
+const maintenance = +document.getElementById("maintenance").value;
+const capex = +document.getElementById("capex").value;
+
+const mgmtRate = +document.getElementById("mgmt").value / 100;
+
+const fedTax = +document.getElementById("federalTax").value / 100;
+const stateTax = +document.getElementById("stateTax").value / 100;
+
+const appreciation = +document.getElementById("appreciation").value / 100;
+const rentGrowth = +document.getElementById("rentGrowth").value / 100;
+
+// Mortgage payment
+const mortgagePayment =
+loan * (rate * Math.pow(1 + rate, termMonths)) /
+(Math.pow(1 + rate, termMonths) - 1);
+
+// PMI (only until equity hits threshold)
+const pmiMonthly = (loan * pmiRate) / 12;
+
+// Effective rent after vacancy
+const effectiveRent = rent * (1 - vacancy);
+
+// Operating monthly costs
+const mgmtCost = rent * mgmtRate;
+const totalOpEx = taxes + insurance + hoa + maintenance + capex + mgmtCost;
+
+// Total monthly cash flow *WITH PMI*
+const cashFlowWithPMI = effectiveRent - totalOpEx - mortgagePayment - pmiMonthly;
+
+// Total monthly cash flow *AFTER PMI drops off*
+const cashFlowNoPMI = effectiveRent - totalOpEx - mortgagePayment;
+
+// Annual numbers
+const annualCashFlow = cashFlowNoPMI * 12;
+
+// ROI metrics
+const totalInitialInvestment = down + closing;
+const cocReturn = (annualCashFlow / totalInitialInvestment) * 100;
+
+// Depreciation (27.5 years, assume building = 80% of value)
+const depreciable = price * 0.80;
+const annualDepreciation = depreciable / 27.5;
+
+const taxSavings = annualDepreciation * (fedTax + stateTax);
+
+const afterTaxCashFlow = annualCashFlow + taxSavings;
+
+// Appreciation
+const valueAfter10 = price * Math.pow(1 + appreciation, 10);
+
+// Mortgage amortization schedule
+let balance = loan;
+let equityHistory = [];
+let cashFlowHistory = [];
+let valueHistory = [];
+
+for (let yr = 1; yr <= 30; yr++) {
+for (let m = 1; m <= 12; m++) {
+const interest = balance * rate;
+const principal = mortgagePayment - interest;
+balance -= principal;
+}
+equityHistory.push(price * Math.pow(1 + appreciation, yr) - balance);
+cashFlowHistory.push(cashFlowNoPMI * 12);
+valueHistory.push(price * Math.pow(1 + appreciation, yr));
+}
+
+const results = `
+<h2>📊 Results</h2>
+<p><b>Loan Amount:</b> $${loan.toLocaleString()}</p>
+<p><b>Monthly Mortgage Payment:</b> $${mortgagePayment.toFixed(2)}</p>
+<p><b>Monthly PMI:</b> $${pmiMonthly.toFixed(2)}</p>
+<p><b>Monthly Cash Flow (with PMI):</b> $${cashFlowWithPMI.toFixed(2)}</p>
+<p><b>Monthly Cash Flow (after PMI removed):</b> $${cashFlowNoPMI.toFixed(2)}</p>
+<p><b>Annual Cash Flow:</b> $${annualCashFlow.toFixed(2)}</p>
+<p><b>Cash-on-Cash Return:</b> ${cocReturn.toFixed(2)}%</p>
+<p><b>Annual Tax Savings (via Depreciation):</b> $${taxSavings.toFixed(2)}</p>
+<p><b>After-Tax Cash Flow:</b> $${afterTaxCashFlow.toFixed(2)}</p>
+<p><b>Property Value After 10 Years:</b> $${valueAfter10.toLocaleString()}</p>
+`;
+
+document.getElementById("results").innerHTML = results;
+
+// CHART: Cash Flow
+new Chart(document.getElementById("chartCashFlow"), {
+type: "line",
+data: {
+labels: Array.from({length: 30}, (_, i) => `Year ${i+1}`),
+datasets: [{
+label: "Annual Cash Flow ($)",
+data: cashFlowHistory,
+borderColor: "#007bff", fill: false
+}]
+}
+});
+
+// CHART: Equity Growth
+new Chart(document.getElementById("chartEquity"), {
+type: "line",
+data: {
+labels: Array.from({length: 30}, (_, i) => `Year ${i+1}`),
+datasets: [{
+label: "Equity ($)",
+data: equityHistory,
+borderColor: "#28a745", fill: false
+}]
+}
+});
+}
+</script>
+
+</body>
+</html>
